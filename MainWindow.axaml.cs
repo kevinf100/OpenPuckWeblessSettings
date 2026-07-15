@@ -22,6 +22,18 @@ public sealed partial class MainWindow : Window
     private static readonly string[] ControllerTypes = ["Xbox", "Switch", "DS4", "DS5"];
     private static readonly string[] MappingNames =
         ["Back L4", "Back R4", "Back L5", "Back R5", "QAM", "A/B + X/Y swap", "Trackpad haptics", "LED brightness", "Rumble"];
+    private static readonly string[] MappingHelp =
+    [
+        "Emulated button code sent when the upper-left back paddle is pressed. Use 0 for no output.",
+        "Emulated button code sent when the upper-right back paddle is pressed. Use 0 for no output.",
+        "Emulated button code sent when the lower-left back paddle is pressed. Use 0 for no output.",
+        "Emulated button code sent when the lower-right back paddle is pressed. Use 0 for no output.",
+        "Emulated button code used for the QAM (three-dots) button. Use 0 for the mode default.",
+        "Use 1 to swap A with B and X with Y for this emulated controller type; use 0 for the normal layout.",
+        "Use 1 to enable trackpad haptics for this emulated controller type, or 0 to disable them.",
+        "LED brightness percentage for this emulated controller type. Use 0 for automatic or 1–100 for a fixed level.",
+        "Use 1 to enable rumble for this emulated controller type, or 0 to disable it. Overall strength is set above."
+    ];
     private static readonly string[] ResetReasons =
         ["unknown", "power-on", "pin/replug", "watchdog (hang)", "CPU lockup", "HARDFAULT", "reboot", "soft reset", "wake-from-off"];
     private static readonly string[] StageNames =
@@ -32,6 +44,10 @@ public sealed partial class MainWindow : Window
     private readonly OpenPuckBackupService _backup;
     private readonly FirmwareUpdateService _firmware;
     private readonly GitHubFirmwareReleaseService _releases = new();
+    private readonly IAppReleaseService _appReleases;
+    private readonly IApplicationVersionProvider _appVersion;
+    private readonly IExternalUriLauncher _uriLauncher;
+    private readonly ISerialDfuService _serialDfu;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<LizardBinding> _lizardBindings = [];
     private readonly List<HangRecord> _hangRecords = [];
@@ -39,23 +55,47 @@ public sealed partial class MainWindow : Window
     private OpenPuckSettingsDraft? _baseline;
     private OpenPuckSettingsDraft? _draft;
     private FirmwareImage? _selectedFirmware;
+    private AppRelease? _latestAppRelease;
     private bool _settingsDirty;
+    private bool _lizardDirty;
     private bool _busy;
     private bool _advanced;
     private bool _updatingControls;
     private bool _lizardLoaded;
     private bool _updatingDeviceSelection;
+    private bool _checkingAppUpdate;
+    private bool _serialDfuBusy;
+    private bool _stabilityTestActive;
+    private bool _closeConfirmationPending;
+    private bool _allowClose;
     private int _renderedControllerType = -1;
 
     public MainWindow() : this(new LibUsbOpenPuckTransport()) { }
 
-    public MainWindow(IOpenPuckUsbTransport transport)
+    public MainWindow(IOpenPuckUsbTransport transport) : this(
+        transport,
+        new GitHubAppReleaseService(),
+        new AssemblyApplicationVersionProvider(),
+        new SystemExternalUriLauncher(),
+        new SerialDfuService()) { }
+
+    public MainWindow(
+        IOpenPuckUsbTransport transport,
+        IAppReleaseService appReleases,
+        IApplicationVersionProvider appVersion,
+        IExternalUriLauncher uriLauncher,
+        ISerialDfuService serialDfu)
     {
         _session = new OpenPuckSession(transport);
         _client = new OpenPuckClient(_session);
         _backup = new OpenPuckBackupService(_client);
         _firmware = new FirmwareUpdateService(_session);
+        _appReleases = appReleases;
+        _appVersion = appVersion;
+        _uriLauncher = uriLauncher;
+        _serialDfu = serialDfu;
         InitializeComponent();
+        AppVersionText.Text = $"Version {_appVersion.DisplayVersion}";
         BuildModeButtons();
         BuildControllerTypeFields();
         PopulateChoiceLists();
@@ -65,14 +105,21 @@ public sealed partial class MainWindow : Window
 
     private void WireEvents()
     {
-        Opened += async (_, _) => await ScanAsync();
+        Opened += async (_, _) =>
+        {
+            RefreshSerialPorts();
+            await ScanAsync();
+            _ = CheckAppUpdatesAsync(false);
+        };
         Closed += async (_, _) =>
         {
             await _lifetime.CancelAsync();
             await _session.DisposeAsync();
             _releases.Dispose();
+            if (_appReleases is IDisposable disposable) disposable.Dispose();
             _lifetime.Dispose();
         };
+        Closing += OnClosing;
         _session.PuckStatusChanged += (_, status) => Dispatcher.UIThread.Post(() => ApplyPuckStatus(status));
         _session.ReversePuckStatusChanged += (_, status) => Dispatcher.UIThread.Post(() => ApplyReversePuckStatus(status));
         _session.FrameReceived += (_, frame) =>
@@ -97,8 +144,8 @@ public sealed partial class MainWindow : Window
             if (_updatingDeviceSelection) return;
             if (_session.IsConnected && DevicePicker.SelectedItem is OpenPuckDevice selected && selected.DeviceKey != _session.Device?.DeviceKey)
             {
-                await DisconnectAsync();
-                await ConnectAsync(selected);
+                if (await DisconnectAsync())
+                    await ConnectAsync(selected);
             }
         };
         AdvancedButton.Click += async (_, _) => await ToggleAdvancedAsync();
@@ -106,24 +153,29 @@ public sealed partial class MainWindow : Window
         ControllerApply.Click += async (_, _) => await ApplyControllerSettingsAsync();
         ControllerRevert.Click += (_, _) => RevertControllerSettings();
 
-        foreach (var control in new Control[] { MouseDivisor, MouseFriction, RumbleScale, PersistMode, Chord1, Chord2, Chord3, SwitchRate, SwitchGyro, LandAll87 })
-            control.PropertyChanged += (_, _) => MarkSettingsDirty();
-        foreach (var field in _typeFields) field.PropertyChanged += (_, _) => MarkSettingsDirty();
+        foreach (var field in new[] { MouseDivisor, MouseFriction, RumbleScale })
+            field.ValueChanged += (_, _) => MarkSettingsDirty();
+        foreach (var field in _typeFields)
+            field.ValueChanged += (_, _) => MarkSettingsDirty();
+        foreach (var picker in new[] { Chord1, Chord2, Chord3, SwitchRate, SwitchGyro })
+            picker.SelectionChanged += (_, _) => MarkSettingsDirty();
+        PersistMode.IsCheckedChanged += (_, _) => MarkSettingsDirty();
+        LandAll87.IsCheckedChanged += (_, _) => MarkSettingsDirty();
 
-        LizardAdd.Click += (_, _) => { _lizardBindings.Add(new LizardBinding { OutputType = 1 }); RenderLizardMap(); };
+        LizardAdd.Click += (_, _) => { _lizardBindings.Add(new LizardBinding { OutputType = 1 }); RenderLizardMap(); SetLizardDirty(true); };
         LizardReload.Click += async (_, _) => await LoadLizardAsync();
         LizardSave.Click += async (_, _) => await SaveLizardAsync();
         LizardReset.Click += async (_, _) =>
         {
             if (await ConfirmAsync("Reset desktop map", "Reset the desktop map to firmware defaults? Unsaved edits are lost."))
-                await RunBusyAsync(async token => { ReplaceLizard(await _client.ResetLizardMapAsync(token)); LizardStatus.Text = "Reset to device defaults."; });
+                await RunBusyAsync(async token => { ReplaceLizard(await _client.ResetLizardMapAsync(token)); SetLizardDirty(false); LizardStatus.Text = "Reset to device defaults."; });
         };
 
         BackupExport.Click += async (_, _) => await ExportBackupAsync();
         BackupImport.Click += async (_, _) => await ImportBackupAsync();
         HapticReset.Click += async (_, _) => await RunCommandAsync("Haptic engine reinitialized.", _client.ClearHapticsAsync);
         ControllerOff.Click += async (_, _) => await RunCommandAsync("Controller power-off requested.", _client.PowerOffControllerAsync);
-        StabilityTest.Click += async (_, _) => await RunCommandAsync(StabilityTest.IsChecked == true ? "Stability test started." : "Stability test stopped.", token => _client.SetStabilityTestAsync(StabilityTest.IsChecked == true, token));
+        StabilityTest.Click += async (_, _) => await ToggleStabilityTestAsync();
         CaptureStart.Click += async (_, _) => await RunCommandAsync("Capture started.", _client.StartCaptureAsync);
         CaptureStop.Click += async (_, _) => await StopCaptureAsync();
         CaptureSave.Click += async (_, _) => await SaveTextAsync("puck-capture.txt", CaptureOutput.Text ?? "", "Text capture", "txt");
@@ -141,8 +193,113 @@ public sealed partial class MainWindow : Window
         ReleaseFactory.Click += async (_, _) => await SelectReleaseAsync(true);
         IncludePrereleases.IsCheckedChanged += async (_, _) => await LoadReleasesAsync();
         ReleaseList.DoubleTapped += async (_, _) => await SelectReleaseAsync(false);
-        SerialDfu.Click += async (_, _) => await ConfirmedRebootAsync("Serial DFU", "Reboot into serial DFU? The target disconnects immediately.", _client.RebootSerialDfuAsync);
-        Uf2Dfu.Click += async (_, _) => await ConfirmedRebootAsync("UF2 DFU", "Reboot into the UF2 bootloader? The target disconnects and mounts as a drive.", _client.RebootUf2DfuAsync);
+        Uf2Dfu.Click += async (_, _) => await ConfirmedRebootAsync("UF2 DFU", "Reboot into the UF2 bootloader without flashing an image? The target disconnects and should mount as a drive.", _client.RebootUf2DfuAsync);
+        SerialDfu.Click += async (_, _) => await ConfirmedRebootAsync("Serial DFU", "Reboot the connected OpenPuck into serial DFU without flashing an image? The target disconnects immediately.", _client.RebootSerialDfuAsync);
+        SerialPortRefresh.Click += (_, _) => RefreshSerialPorts();
+        SerialPortDfu.Click += async (_, _) => await EnterStandaloneDfuAsync();
+        CheckAppUpdates.Click += async (_, _) => await CheckAppUpdatesAsync(true);
+        ViewAppRelease.Click += (_, _) => OpenUri(_latestAppRelease?.ReleaseUri ?? GitHubAppReleaseService.ReleasesUri);
+        AppUpdateButton.Click += (_, _) => OpenUri(_latestAppRelease?.ReleaseUri ?? GitHubAppReleaseService.ReleasesUri);
+        OpenThisRepository.Click += (_, _) => OpenUri(GitHubAppReleaseService.RepositoryUri);
+        OpenUpstreamRepository.Click += (_, _) => OpenUri(GitHubAppReleaseService.UpstreamRepositoryUri);
+    }
+
+    private async Task CheckAppUpdatesAsync(bool manual)
+    {
+        if (_checkingAppUpdate) return;
+        _checkingAppUpdate = true;
+        CheckAppUpdates.IsEnabled = false;
+        AppUpdateStatus.Text = "Checking GitHub releases…";
+        try
+        {
+            var result = await _appReleases.CheckAsync(_appVersion.Version, _appVersion.IsPrerelease, _lifetime.Token);
+            _latestAppRelease = result.Latest;
+            ViewAppRelease.IsEnabled = result.Latest is not null;
+            if (result.Latest is null)
+            {
+                AppUpdateButton.IsVisible = false;
+                AppUpdateStatus.Text = "No published app releases are currently available.";
+            }
+            else if (result.IsUpdateAvailable)
+            {
+                AppUpdateButton.Content = $"Update v{result.Latest.Version} available";
+                AppUpdateButton.IsVisible = true;
+                AppUpdateStatus.Text = $"Version {result.Latest.Version} is available: {result.Latest.Name}";
+            }
+            else
+            {
+                AppUpdateButton.IsVisible = false;
+                AppUpdateStatus.Text = $"Version {_appVersion.DisplayVersion} is current. Latest published version: {result.Latest.Version}.";
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception exception)
+        {
+            AppUpdateStatus.Text = "Update check unavailable: " + FlattenException(exception);
+            if (manual) AppUpdateStatus.Text += " You can still open this project's GitHub from the links below.";
+        }
+        finally
+        {
+            _checkingAppUpdate = false;
+            CheckAppUpdates.IsEnabled = true;
+        }
+    }
+
+    private void RefreshSerialPorts(string? status = null)
+    {
+        try
+        {
+            var selected = SerialPortPicker.SelectedItem as string;
+            var ports = _serialDfu.GetPortNames();
+            SerialPortPicker.ItemsSource = ports;
+            SerialPortPicker.SelectedItem = selected is not null && ports.Contains(selected, StringComparer.OrdinalIgnoreCase) ? selected : ports.FirstOrDefault();
+            SerialPortDfu.IsEnabled = ports.Count > 0 && !_serialDfuBusy;
+            SerialDfuStatus.Text = status ?? (ports.Count == 0
+                ? "No serial ports found. Double-tap Reset or briefly short RST to GND twice to enter DFU manually."
+                : $"Found {ports.Count} serial port{(ports.Count == 1 ? "" : "s")}. Select the board's port before continuing.");
+        }
+        catch (Exception exception)
+        {
+            SerialPortPicker.ItemsSource = Array.Empty<string>();
+            SerialPortDfu.IsEnabled = false;
+            SerialDfuStatus.Text = "Could not enumerate serial ports: " + FlattenException(exception);
+        }
+    }
+
+    private async Task EnterStandaloneDfuAsync()
+    {
+        if (_serialDfuBusy) return;
+        if (SerialPortPicker.SelectedItem is not string portName)
+        {
+            SerialDfuStatus.Text = "Select a serial port first. If none appears, use the board's double-reset method.";
+            return;
+        }
+        if (!await ConfirmAsync("Enter serial bootloader", $"Send a 1200-baud touch to {portName}? This does not flash firmware. A compatible board should disconnect and reappear in its bootloader.")) return;
+        _serialDfuBusy = true;
+        SerialPortRefresh.IsEnabled = false;
+        SerialPortDfu.IsEnabled = false;
+        SerialDfuStatus.Text = $"Sending 1200-baud touch to {portName}…";
+        try
+        {
+            await _serialDfu.EnterDfuAsync(portName, _lifetime.Token);
+            await Task.Delay(TimeSpan.FromSeconds(1.5), _lifetime.Token);
+            RefreshSerialPorts($"1200-baud touch sent to {portName}. The board should re-enumerate in DFU; if it did not, double-tap Reset or briefly short RST to GND twice.");
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (UnauthorizedAccessException exception) { SerialDfuStatus.Text = $"Cannot open {portName}; it may be in use or access may be denied. {FlattenException(exception)}"; }
+        catch (Exception exception) { SerialDfuStatus.Text = $"Could not enter DFU through {portName}: {FlattenException(exception)} Use the board's double-reset method instead."; }
+        finally
+        {
+            _serialDfuBusy = false;
+            SerialPortRefresh.IsEnabled = true;
+            SerialPortDfu.IsEnabled = SerialPortPicker.SelectedItem is string;
+        }
+    }
+
+    private void OpenUri(Uri uri)
+    {
+        try { _uriLauncher.Open(uri); }
+        catch (Exception exception) { AppUpdateStatus.Text = "Could not open the system browser: " + FlattenException(exception); }
     }
 
     private async Task ScanAsync()
@@ -166,23 +323,35 @@ public sealed partial class MainWindow : Window
         if (DevicePicker.SelectedItem is OpenPuckDevice device) await ConnectAsync(device);
     }
 
-    private async Task ConnectAsync(OpenPuckDevice device)
+    private async Task<bool> ConnectAsync(OpenPuckDevice device)
     {
+        if (HasUnsavedChanges && !await ConfirmDiscardChangesAsync("connect and reload settings from the puck"))
+            return false;
+
         await RunBusyAsync(async token =>
         {
             ConnectionState.Text = "Connecting…";
             var profile = await _session.ConnectAsync(device, token);
             ConnectionState.Text = $"Connected · {profile.Kind} · protocol v{profile.ProtocolVersion}";
+            ClearUnsavedChanges();
             SetConnectedUi(true);
+            if (profile.Capabilities.HasSettings && _session.PuckStatus is { } status)
+                ApplyPuckStatus(status);
             if (profile.Capabilities.HasLizardMap) await LoadLizardAsync();
         });
+        return _session.IsConnected;
     }
 
-    private async Task DisconnectAsync()
+    private async Task<bool> DisconnectAsync()
     {
+        if (HasUnsavedChanges && !await ConfirmDiscardChangesAsync("disconnect"))
+            return false;
+
         await RunBusyAsync(async _ => await _session.DisconnectAsync());
+        ClearUnsavedChanges();
         SetConnectedUi(false);
         ConnectionState.Text = "Disconnected";
+        return true;
     }
 
     private void ApplyPuckStatus(PuckStatusSnapshot status)
@@ -202,9 +371,14 @@ public sealed partial class MainWindow : Window
         if (status.Slots.Count == 0)
             SlotStatusList.Children.Add(new TextBlock { Text = status.RadioPeerLinked ? "Controller linked" : "No linked controller" });
         foreach (var slot in status.Slots)
-            SlotStatusList.Children.Add(new TextBlock { Text = $"Controller {slot.Slot + 1}: {(slot.Linked ? "linked" : "offline")} · battery {slot.BatteryPercent}% · RSSI -{slot.RssiMagnitude} dBm · {slot.DeliveredPerSecond}/s delivered ({slot.NewPerSecond} new)" });
+            SlotStatusList.Children.Add(new TextBlock
+            {
+                Text = $"Controller {slot.Slot + 1}: {(slot.Linked ? "linked" : "offline")} · battery {slot.BatteryPercent}% · RSSI -{slot.RssiMagnitude} dBm · poll {slot.PollsPerSecond}/s · delivered {slot.DeliveredPerSecond}/s ({slot.NewPerSecond} new) · fails CRC {slot.CrcFailures} / no RX {slot.NoRxFailures} / relay {slot.RelayFailures}",
+                TextWrapping = TextWrapping.Wrap
+            });
         RateStatus.Text = $"poll {status.PollsPerSecond}/s · delivered {status.DeliveredPerSecond}/s · new {status.NewPerSecond}/s · relay {status.RelayFramesPerSecond}/s";
         FailureStatus.Text = $"CRC {status.CrcFailures} · no RX {status.NoRxFailures} · heal {status.HealCount} · ring {status.RingFaults}";
+        ClockStatus.Text = $"LF {ClockName(status.LowFrequencyClock, true)} · HF {ClockName(status.HighFrequencyClock, false)} · {status.MicrosecondsPerMillisecond} µs/ms (ideal 1000) · RF poll period {status.PollMicroseconds} µs";
         LoopStatus.Text = status.LoopStallMilliseconds >= 200
             ? $"STALLED @ {Stage(status.LoopStage)} for {status.LoopStallMilliseconds} ms"
             : $"running · {status.LoopMicroseconds} µs · worst {Stage(status.WorstStage)} {status.WorstStageMicroseconds} µs · stack {status.UsbdFreeStackWords} words";
@@ -277,7 +451,7 @@ public sealed partial class MainWindow : Window
         LandAll87.IsChecked = draft.LandAll87;
         RenderControllerType();
         ControllerApplyStatus.Text = "Up to date";
-        _settingsDirty = false;
+        SetSettingsDirty(false);
         _updatingControls = false;
     }
 
@@ -308,7 +482,7 @@ public sealed partial class MainWindow : Window
                 accepted.AddRange(await _client.ApplySettingsAsync(_baseline, draft, progress, token));
                 _baseline = CloneDraft(draft);
                 _draft = CloneDraft(draft);
-                _settingsDirty = false;
+                SetSettingsDirty(false);
                 ControllerApplyStatus.Text = accepted.Count == 0 ? "No changes" : $"Applied {accepted.Count} field(s)";
             });
         }
@@ -320,18 +494,23 @@ public sealed partial class MainWindow : Window
     }
 
     private void RevertControllerSettings() { if (_baseline is not null) PopulateSettings(_baseline); }
-    private void MarkSettingsDirty() { if (_updatingControls) return; _settingsDirty = true; ControllerApplyStatus.Text = "Unsaved changes"; }
+    private void MarkSettingsDirty()
+    {
+        if (_updatingControls) return;
+        SetSettingsDirty(true);
+        ControllerApplyStatus.Text = "Unsaved changes";
+    }
 
     private async Task LoadLizardAsync()
     {
         if (_session.Profile?.Capabilities.HasLizardMap != true) return;
-        await RunBusyAsync(async token => { ReplaceLizard(await _client.LoadLizardMapAsync(token)); _lizardLoaded = true; LizardStatus.Text = $"{_lizardBindings.Count} / 32 bindings loaded"; });
+        await RunBusyAsync(async token => { ReplaceLizard(await _client.LoadLizardMapAsync(token)); _lizardLoaded = true; SetLizardDirty(false); LizardStatus.Text = $"{_lizardBindings.Count} / 32 bindings loaded"; });
     }
 
     private async Task SaveLizardAsync()
     {
         ReadLizardEditors();
-        await RunBusyAsync(async token => { ReplaceLizard(await _client.SaveLizardMapAsync(_lizardBindings, token)); _lizardLoaded = true; LizardStatus.Text = $"Saved {_lizardBindings.Count} bindings"; });
+        await RunBusyAsync(async token => { ReplaceLizard(await _client.SaveLizardMapAsync(_lizardBindings, token)); _lizardLoaded = true; SetLizardDirty(false); LizardStatus.Text = $"Saved {_lizardBindings.Count} bindings"; });
     }
 
     private void ReplaceLizard(IEnumerable<LizardBinding> bindings) { _lizardBindings.Clear(); _lizardBindings.AddRange(bindings); RenderLizardMap(); }
@@ -352,8 +531,12 @@ public sealed partial class MainWindow : Window
             Grid.SetColumn(trigger, 3); row.Children.Add(trigger);
             var hold = new TextBox { Name = "HoldMask", Text = $"0x{binding.HoldMask:X8}", PlaceholderText = "hold mask", Margin = new Thickness(4, 0) };
             Grid.SetColumn(hold, 4); row.Children.Add(hold);
+            type.SelectionChanged += (_, _) => SetLizardDirty(true);
+            data.TextChanged += (_, _) => SetLizardDirty(true);
+            trigger.TextChanged += (_, _) => SetLizardDirty(true);
+            hold.TextChanged += (_, _) => SetLizardDirty(true);
             var remove = new Button { Content = "Delete", Tag = index };
-            remove.Click += (_, _) => { ReadLizardEditors(); _lizardBindings.RemoveAt((int)remove.Tag!); RenderLizardMap(); };
+            remove.Click += (_, _) => { ReadLizardEditors(); _lizardBindings.RemoveAt((int)remove.Tag!); RenderLizardMap(); SetLizardDirty(true); };
             Grid.SetColumn(remove, 5); row.Children.Add(remove);
             LizardList.Children.Add(row);
         }
@@ -539,6 +722,23 @@ public sealed partial class MainWindow : Window
         if (await ConfirmAsync(title, message)) await RunCommandAsync($"{title} command sent.", command);
     }
 
+    private async Task ToggleStabilityTestAsync()
+    {
+        if (_busy) return;
+        var enable = !_stabilityTestActive;
+        try
+        {
+            await RunBusyAsync(token => _client.SetStabilityTestAsync(enable, token));
+            _stabilityTestActive = enable;
+            StabilityTest.Content = enable ? "Stop stability test" : "Start stability test";
+            AppendDiagnostic(enable ? "Stability test started." : "Stability test stopped.");
+        }
+        catch (Exception exception)
+        {
+            AppendDiagnostic(FlattenException(exception));
+        }
+    }
+
     private async Task ToggleAdvancedAsync()
     {
         if (!_advanced)
@@ -602,10 +802,14 @@ public sealed partial class MainWindow : Window
     {
         for (var index = 0; index < _typeFields.Length; index++)
         {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("250,*"), Margin = new Thickness(0, 3) };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("250,*,Auto"), Margin = new Thickness(0, 3) };
             row.Children.Add(new TextBlock { Text = MappingNames[index], VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.LightSteelBlue });
             var field = new NumericUpDown { Minimum = 0, Maximum = index == 7 ? 100 : 255 };
             Grid.SetColumn(field, 1); row.Children.Add(field);
+            var help = new Button { Content = "?", Margin = new Thickness(8, 0, 0, 0) };
+            help.Classes.Add("help");
+            ToolTip.SetTip(help, MappingHelp[index]);
+            Grid.SetColumn(help, 2); row.Children.Add(help);
             ControllerTypeFields.Children.Add(row);
             _typeFields[index] = field;
         }
@@ -655,7 +859,64 @@ public sealed partial class MainWindow : Window
         BackupExport.IsEnabled = connected;
         BackupImport.IsEnabled = connected;
         FirmwarePick.IsEnabled = connected;
+        SerialDfu.IsEnabled = connected;
+        Uf2Dfu.IsEnabled = connected;
+        if (!connected) MainTabs.SelectedIndex = 0;
         SetProfileVisibility(connected ? _session.Profile?.Capabilities : null);
+    }
+
+    private bool HasUnsavedChanges => _settingsDirty || _lizardDirty;
+
+    private void SetSettingsDirty(bool dirty)
+    {
+        _settingsDirty = dirty;
+        UpdateUnsavedChangesUi();
+    }
+
+    private void SetLizardDirty(bool dirty)
+    {
+        _lizardDirty = dirty;
+        UpdateUnsavedChangesUi();
+        if (dirty) LizardStatus.Text = "Unsaved changes";
+    }
+
+    private void ClearUnsavedChanges()
+    {
+        _settingsDirty = false;
+        _lizardDirty = false;
+        UpdateUnsavedChangesUi();
+    }
+
+    private void UpdateUnsavedChangesUi()
+    {
+        UnsavedChangesText.IsVisible = HasUnsavedChanges;
+        Title = "OpenPuck Native Configuration" + (HasUnsavedChanges ? " *" : "");
+    }
+
+    private Task<bool> ConfirmDiscardChangesAsync(string action) => ConfirmAsync(
+        "Unsaved changes",
+        $"You have unsaved changes. Continue to {action} and discard them?");
+
+    private async void OnClosing(object? sender, WindowClosingEventArgs eventArgs)
+    {
+        if (_allowClose || !HasUnsavedChanges) return;
+
+        eventArgs.Cancel = true;
+        if (_closeConfirmationPending) return;
+
+        _closeConfirmationPending = true;
+        try
+        {
+            if (await ConfirmDiscardChangesAsync("close the app"))
+            {
+                _allowClose = true;
+                Close();
+            }
+        }
+        finally
+        {
+            _closeConfirmationPending = false;
+        }
     }
 
     private void UpdateDeviceDetails()
@@ -771,6 +1032,9 @@ public sealed partial class MainWindow : Window
     }
 
     private static string Stage(byte index) => index < StageNames.Length ? StageNames[index] : index == 0xFF ? "—" : $"stage {index}";
+    private static string ClockName(byte clock, bool lowFrequency) => lowFrequency
+        ? clock switch { 0 => "stopped", 1 => "RC", 2 => "crystal", 3 => "synth", _ => $"code {clock}" }
+        : clock switch { 0 => "RC", 2 => "crystal", _ => $"code {clock}" };
     private static string FlattenException(Exception exception) => string.Join(" ", Generate(exception).Distinct());
     private static IEnumerable<string> Generate(Exception exception) { for (Exception? current = exception; current is not null; current = current.InnerException) yield return current.Message; }
 

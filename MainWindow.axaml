@@ -10,6 +10,9 @@
     <Style Selector="Border.card"><Setter Property="Background" Value="#171B25"/><Setter Property="BorderBrush" Value="#30384D"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="10"/><Setter Property="Padding" Value="16"/><Setter Property="Margin" Value="0,0,0,12"/></Style>
     <Style Selector="Button"><Setter Property="Padding" Value="12,7"/></Style>
     <Style Selector="Button.danger"><Setter Property="Background" Value="#6D2530"/><Setter Property="Foreground" Value="White"/></Style>
+    <Style Selector="Button.help"><Setter Property="Width" Value="22"/><Setter Property="Height" Value="22"/><Setter Property="MinWidth" Value="22"/><Setter Property="MinHeight" Value="22"/><Setter Property="Padding" Value="0"/><Setter Property="CornerRadius" Value="4"/><Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="#91A3C8"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="ToolTip.ShowDelay" Value="250"/></Style>
+    <Style Selector="Button.help:pointerover"><Setter Property="Foreground" Value="#D7E4FF"/><Setter Property="Background" Value="#293249"/></Style>
+    <Style Selector="Button.help:focus"><Setter Property="Foreground" Value="#FFFFFF"/><Setter Property="Background" Value="#3157A5"/></Style>
     <Style Selector="TextBox, ComboBox, NumericUpDown"><Setter Property="MinHeight" Value="34"/></Style>
     <Style Selector="TabControl /template/ TabStrip"><Setter Property="Background" Value="#10131B"/></Style>
     <Style Selector="TabItem"><Setter Property="FontSize" Value="14"/><Setter Property="Padding" Value="14,12"/><Setter Property="HorizontalContentAlignment" Value="Left"/></Style>
@@ -17,17 +20,21 @@
 
   <Grid RowDefinitions="Auto,*">
     <Border Grid.Row="0" Background="#11151E" BorderBrush="#30384D" BorderThickness="0,0,0,1" Padding="12,10">
-      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" RowDefinitions="Auto,Auto">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto">
         <StackPanel Grid.Column="0" Grid.RowSpan="2" Margin="0,0,14,0">
           <TextBlock Classes="h1" Text="OpenPuck"/>
           <TextBlock Foreground="#91A3C8" Text="Native configuration"/>
         </StackPanel>
-        <ComboBox x:Name="DevicePicker" Grid.Column="1" MinWidth="180" HorizontalAlignment="Stretch"/>
-        <Button x:Name="RescanButton" Grid.Column="2" Margin="8,0,0,0" Content="Rescan"/>
-        <Button x:Name="ConnectButton" Grid.Column="3" Margin="8,0,0,0" Content="Connect"/>
-        <Button x:Name="AdvancedButton" Grid.Column="4" Margin="8,0,0,0" Content="Advanced"/>
-        <TextBlock x:Name="DeviceDetails" Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="1" Margin="0,6,8,0" Foreground="#91A3C8" Text="Scanning for OpenPuck targets…" TextTrimming="CharacterEllipsis"/>
-        <TextBlock x:Name="ConnectionState" Grid.Column="3" Grid.ColumnSpan="2" Grid.Row="1" Margin="8,6,0,0" HorizontalAlignment="Right" Text="Not connected" TextTrimming="CharacterEllipsis"/>
+        <ComboBox x:Name="DevicePicker" Grid.Column="1" MinWidth="180" Height="34" VerticalAlignment="Top" HorizontalAlignment="Stretch"/>
+        <Button x:Name="RescanButton" Grid.Column="2" Margin="8,0,0,0" Height="34" VerticalAlignment="Top" Content="Rescan"/>
+        <Button x:Name="ConnectButton" Grid.Column="3" Margin="8,0,0,0" Height="34" VerticalAlignment="Top" Content="Connect"/>
+        <Button x:Name="AppUpdateButton" Grid.Column="4" Margin="8,0,0,0" Height="34" VerticalAlignment="Top" Content="Update available" IsVisible="False" Background="#3157A5"/>
+        <Button x:Name="AdvancedButton" Grid.Column="5" Margin="8,0,0,0" Height="34" VerticalAlignment="Top" Content="Advanced"/>
+        <Grid Grid.Column="1" Grid.ColumnSpan="5" Grid.Row="1" Margin="0,6,0,0" ColumnDefinitions="*,Auto,*">
+          <TextBlock x:Name="DeviceDetails" Margin="0,0,8,0" Foreground="#91A3C8" Text="Scanning for OpenPuck targets…" TextTrimming="CharacterEllipsis"/>
+          <TextBlock x:Name="UnsavedChangesText" Grid.Column="1" Margin="12,0" Foreground="#E5C76B" FontWeight="SemiBold" Text="● Unsaved changes" IsVisible="False"/>
+          <TextBlock x:Name="ConnectionState" Grid.Column="2" Margin="8,0,0,0" HorizontalAlignment="Stretch" TextAlignment="Right" Text="Not connected" TextTrimming="CharacterEllipsis"/>
+        </Grid>
       </Grid>
     </Border>
 
@@ -41,13 +48,14 @@
             <TextBlock Grid.Row="2" Margin="0,14,0,0" Classes="label" Text="RF state"/><TextBlock Grid.Row="2" Grid.Column="1" Margin="0,14,0,0" Classes="label" Text="USB mode"/><TextBlock Grid.Row="2" Grid.Column="2" Margin="0,14,0,0" Classes="label" Text="Updater"/>
             <TextBlock x:Name="OverviewRf" Grid.Row="3" Margin="0,0,14,0" FontSize="17" TextWrapping="Wrap" Text="—"/><TextBlock x:Name="OverviewMode" Grid.Row="3" Grid.Column="1" Margin="0,0,14,0" FontSize="17" TextWrapping="Wrap" Text="—"/><TextBlock x:Name="OverviewUpdater" Grid.Row="3" Grid.Column="2" FontSize="17" TextWrapping="Wrap" Text="—"/>
           </Grid></Border>
-          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Controller slots" Margin="0,0,0,10"/><StackPanel x:Name="SlotStatusList"/><TextBlock x:Name="ReversePuckSummary" IsVisible="False" TextWrapping="Wrap"/></StackPanel></Border>
-          <Border Classes="card"><Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
-            <TextBlock Classes="h2" Grid.ColumnSpan="2" Text="Link and timing" Margin="0,0,0,10"/>
+          <Border Classes="card"><StackPanel><StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,10"><TextBlock Classes="h2" Text="Controller link status"/><Button Classes="help" Content="?" ToolTip.Tip="Each row is one bonded controller. Polls, delivered reports, new reports, and failures are per-controller rates; the Link and timing card below shows totals across all controllers."/></StackPanel><StackPanel x:Name="SlotStatusList"/><TextBlock x:Name="ReversePuckSummary" IsVisible="False" TextWrapping="Wrap"/></StackPanel></Border>
+          <Border Classes="card"><Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+            <StackPanel Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10"><TextBlock Classes="h2" Text="Link and timing (all controllers)"/><Button Classes="help" Content="?" ToolTip.Tip="These are puck-wide totals. Polls are RF requests; delivered reports reached the host; new reports changed since the prior delivery; relay is controller traffic forwarded by the puck."/></StackPanel>
             <TextBlock Grid.Row="1" Classes="label" Text="Rates"/><TextBlock x:Name="RateStatus" Grid.Row="1" Grid.Column="1" TextWrapping="Wrap" Text="—"/>
             <TextBlock Grid.Row="2" Classes="label" Text="RF failures"/><TextBlock x:Name="FailureStatus" Grid.Row="2" Grid.Column="1" TextWrapping="Wrap" Text="—"/>
-            <TextBlock Grid.Row="3" Classes="label" Text="Loop"/><TextBlock x:Name="LoopStatus" Grid.Row="3" Grid.Column="1" TextWrapping="Wrap" Text="—"/>
-            <TextBlock Grid.Row="4" Classes="label" Text="IMU"/><TextBlock x:Name="ImuStatus" Grid.Row="4" Grid.Column="1" TextWrapping="Wrap" Text="—"/>
+            <TextBlock Grid.Row="3" Classes="label" Text="Clock health"/><TextBlock x:Name="ClockStatus" Grid.Row="3" Grid.Column="1" TextWrapping="Wrap" Text="—"/>
+            <TextBlock Grid.Row="4" Classes="label" Text="Loop"/><TextBlock x:Name="LoopStatus" Grid.Row="4" Grid.Column="1" TextWrapping="Wrap" Text="—"/>
+            <TextBlock Grid.Row="5" Classes="label" Text="IMU"/><TextBlock x:Name="ImuStatus" Grid.Row="5" Grid.Column="1" TextWrapping="Wrap" Text="—" ToolTip.Tip="Raw controller accelerometer values. About 16384 equals 1 g at the sensor's native ±2 g scale."/>
           </Grid></Border>
           <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Last reset"/><TextBlock x:Name="ResetStatus" Margin="0,8,0,0" TextWrapping="Wrap" Text="—"/></StackPanel></Border>
         </StackPanel></ScrollViewer>
@@ -56,21 +64,23 @@
       <TabItem Header="Controller">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="16" MaxWidth="1100" HorizontalAlignment="Stretch">
           <TextBlock Classes="h1" Text="Controller" Margin="0,0,0,14"/>
-          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="USB mode"/><TextBlock Margin="0,4,0,12" Foreground="#91A3C8" Text="Mode changes reboot immediately. Clean PlayStation modes remove the configuration interface." TextWrapping="Wrap"/><WrapPanel x:Name="ModeButtons"/></StackPanel></Border>
-          <Border Classes="card"><StackPanel Spacing="8"><TextBlock Classes="h2" Text="General settings"/>
-            <Grid ColumnDefinitions="220,*,90" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
-              <TextBlock Classes="label" VerticalAlignment="Center" Text="Mouse sensitivity divisor"/><NumericUpDown x:Name="MouseDivisor" Grid.Column="1" Minimum="1" Maximum="255"/>
-              <TextBlock Grid.Row="1" Classes="label" VerticalAlignment="Center" Text="Mouse glide / friction"/><NumericUpDown x:Name="MouseFriction" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="255"/>
-              <TextBlock Grid.Row="2" Classes="label" VerticalAlignment="Center" Text="Rumble scale (%)"/><NumericUpDown x:Name="RumbleScale" Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="255"/>
-              <TextBlock Grid.Row="3" Classes="label" VerticalAlignment="Center" Text="Persist mode"/><CheckBox x:Name="PersistMode" Grid.Row="3" Grid.Column="1"/>
-              <TextBlock Grid.Row="4" Classes="label" VerticalAlignment="Center" Text="L4 + A chord"/><ComboBox x:Name="Chord1" Grid.Row="4" Grid.Column="1"/>
-              <TextBlock Grid.Row="5" Classes="label" VerticalAlignment="Center" Text="L4 + B chord"/><ComboBox x:Name="Chord2" Grid.Row="5" Grid.Column="1"/>
-              <TextBlock Grid.Row="6" Classes="label" VerticalAlignment="Center" Text="L4 + X chord"/><ComboBox x:Name="Chord3" Grid.Row="6" Grid.Column="1"/>
-              <TextBlock Grid.Row="7" Classes="label" VerticalAlignment="Center" Text="Switch motion rate / gyro"/><StackPanel Grid.Row="7" Grid.Column="1" Orientation="Horizontal" Spacing="8"><ComboBox x:Name="SwitchRate" Width="210"/><ComboBox x:Name="SwitchGyro" Width="150"/></StackPanel>
-            </Grid>
-          </StackPanel></Border>
-          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Per-emulated-controller mapping"/><ComboBox x:Name="ControllerTypePicker" Margin="0,10,0,8" Width="220" HorizontalAlignment="Left"/><StackPanel x:Name="ControllerTypeFields"/></StackPanel></Border>
-          <Border x:Name="LandAllPanel" Classes="card" IsVisible="False"><StackPanel Orientation="Horizontal" Spacing="12"><CheckBox x:Name="LandAll87" Content="Land all host 0x87 configuration packets"/><TextBlock Foreground="#E5C76B" Text="Engineering experiment"/></StackPanel></Border>
+          <Border Classes="card"><StackPanel><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Classes="h2" Text="USB mode"/><Button Classes="help" Content="?" ToolTip.Tip="Changes which controller the puck emulates over USB. Switching mode reboots and re-enumerates the puck. Clean PlayStation and PS3 modes hide the configuration interface; use Back4 + A to return to Steam mode."/></StackPanel><TextBlock Margin="0,4,0,12" Foreground="#91A3C8" Text="Mode changes reboot immediately. Clean PlayStation and PS3 modes remove the configuration interface." TextWrapping="Wrap"/><WrapPanel x:Name="ModeButtons"/><StackPanel Orientation="Horizontal" Spacing="10" Margin="0,12,0,0"><CheckBox x:Name="PersistMode" Content="Persist last mode"/><Button Classes="help" Content="?" ToolTip.Tip="Off (default): each restart or fresh reconnect starts in Steam mode. On: the puck remembers the last USB mode you selected."/></StackPanel></StackPanel></Border>
+          <Border Classes="card"><StackPanel><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Classes="h2" Text="Back4 + face button chords"/><Button Classes="help" Content="?" ToolTip.Tip="Hold all four back paddles (L4 + R4 + L5 + R5) and a face button to change USB mode without this app. Back4 + A always selects Steam; B, X, and Y are configurable here."/></StackPanel><TextBlock Margin="0,4,0,10" Foreground="#91A3C8" Text="Hold L4 + R4 + L5 + R5, then press a face button. Back4 + A always returns to Steam mode." TextWrapping="Wrap"/><Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto">
+            <TextBlock Classes="label" VerticalAlignment="Center" Text="B + Back4 →"/><ComboBox x:Name="Chord1" Grid.Column="1"/>
+            <TextBlock Grid.Row="1" Classes="label" VerticalAlignment="Center" Text="X + Back4 →"/><ComboBox x:Name="Chord2" Grid.Row="1" Grid.Column="1"/>
+            <TextBlock Grid.Row="2" Classes="label" VerticalAlignment="Center" Text="Y + Back4 →"/><ComboBox x:Name="Chord3" Grid.Row="2" Grid.Column="1"/>
+          </Grid></StackPanel></Border>
+          <Border Classes="card"><StackPanel><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Classes="h2" Text="Trackpad mouse (Lizard + Xbox)"/><Button Classes="help" Content="?" ToolTip.Tip="Controls the right-trackpad cursor in Steam-mode Lizard (with Steam closed) and Xbox mode. Sensitivity is a divisor, so lower values move the pointer faster; glide controls how long it coasts after a flick."/></StackPanel><Grid Margin="0,10,0,0" ColumnDefinitions="220,*" RowDefinitions="Auto,Auto">
+            <TextBlock Classes="label" VerticalAlignment="Center" Text="Sensitivity divisor"/><NumericUpDown x:Name="MouseDivisor" Grid.Column="1" Minimum="1" Maximum="255"/>
+            <TextBlock Grid.Row="1" Classes="label" VerticalAlignment="Center" Text="Glide / friction"/><NumericUpDown x:Name="MouseFriction" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="255"/>
+          </Grid></StackPanel></Border>
+          <Border Classes="card"><StackPanel><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Classes="h2" Text="Rumble strength"/><Button Classes="help" Content="?" ToolTip.Tip="Scales rumble amplitude across all USB modes. 100% is native strength, 200% is double strength, and 0% disables rumble."/></StackPanel><Grid Margin="0,10,0,0" ColumnDefinitions="220,*"><TextBlock Classes="label" VerticalAlignment="Center" Text="Strength (%)"/><NumericUpDown x:Name="RumbleScale" Grid.Column="1" Minimum="0" Maximum="255" Increment="5"/></Grid></StackPanel></Border>
+          <Border Classes="card"><StackPanel><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Classes="h2" Text="Switch Pro motion"/><Button Classes="help" Content="?" ToolTip.Tip="Full rate (~250 Hz) has the lowest latency. 120 Hz is low-latency and drift-free. 66 Hz is a compatibility fallback. Gyro scale changes sensitivity only in Switch Pro mode."/></StackPanel><Grid Margin="0,10,0,0" ColumnDefinitions="220,*" RowDefinitions="Auto,Auto">
+            <TextBlock Classes="label" VerticalAlignment="Center" Text="Report rate"/><ComboBox x:Name="SwitchRate" Grid.Column="1"/>
+            <TextBlock Grid.Row="1" Classes="label" VerticalAlignment="Center" Text="Gyro scale"/><ComboBox x:Name="SwitchGyro" Grid.Row="1" Grid.Column="1"/>
+          </Grid></StackPanel></Border>
+          <Border Classes="card"><StackPanel><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Classes="h2" Text="Per-emulated-controller mapping"/><Button Classes="help" Content="?" ToolTip.Tip="Stores a separate mapping for Xbox, Switch, DS4, and DS5 emulation. Back-paddle and QAM values select the emulated button number; toggles use 0 for off and 1 for on; LED is 0 for automatic or 1–100%; rumble uses 0 for off and 1 for on."/></StackPanel><TextBlock Margin="0,4,0,0" Foreground="#91A3C8" Text="Choose the emulated controller type, then edit its independent button and haptic settings." TextWrapping="Wrap"/><ComboBox x:Name="ControllerTypePicker" Margin="0,10,0,8" Width="220" HorizontalAlignment="Left"/><StackPanel x:Name="ControllerTypeFields"/></StackPanel></Border>
+          <Border x:Name="LandAllPanel" Classes="card" IsVisible="False"><StackPanel Orientation="Horizontal" Spacing="12"><CheckBox x:Name="LandAll87" Content="Land all host 0x87 configuration packets"/><TextBlock Foreground="#E5C76B" Text="Engineering experiment"/><Button Classes="help" Content="?" ToolTip.Tip="Relays Steam's complete haptic/settings configuration to the controller instead of discarding it. If gyro freezes in Steam, turn this experiment off."/></StackPanel></Border>
           <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8"><TextBlock x:Name="ControllerApplyStatus" VerticalAlignment="Center" Foreground="#91A3C8"/><Button x:Name="ControllerRevert" Content="Revert"/><Button x:Name="ControllerApply" Content="Apply" Background="#3157A5"/></StackPanel>
         </StackPanel></ScrollViewer>
       </TabItem>
@@ -90,7 +100,7 @@
 
       <TabItem Header="Diagnostics">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="16" MaxWidth="1100" HorizontalAlignment="Stretch"><TextBlock Classes="h1" Text="Diagnostics" Margin="0,0,0,14"/>
-          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Maintenance"/><WrapPanel Margin="0,10,0,0"><Button x:Name="HapticReset" Content="Clear stuck haptics"/><Button x:Name="ControllerOff" Content="Power off RF controller"/><ToggleButton x:Name="StabilityTest" Content="Stability test"/></WrapPanel></StackPanel></Border>
+          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Maintenance"/><WrapPanel Margin="0,10,0,0"><Button x:Name="HapticReset" Content="Clear stuck haptics"/><Button x:Name="ControllerOff" Content="Power off RF controller"/><Button x:Name="StabilityTest" Content="Start stability test"/></WrapPanel><TextBlock Margin="0,8,0,0" Foreground="#91A3C8" Text="The stability test buzzes connected controllers every 10 seconds to keep them awake during unattended hang and reset testing. Stop the test when you are finished." TextWrapping="Wrap"/></StackPanel></Border>
           <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Host-to-controller capture"/><WrapPanel Margin="0,10,0,0"><Button x:Name="CaptureStart" Content="Start"/><Button x:Name="CaptureStop" Content="Stop + drain"/><Button x:Name="CaptureSave" Content="Save capture…"/></WrapPanel><TextBox x:Name="CaptureOutput" Margin="0,10,0,0" Height="180" AcceptsReturn="True" IsReadOnly="True" FontFamily="Consolas" TextWrapping="NoWrap"/></StackPanel></Border>
           <Border x:Name="AdvancedDiagnostics" Classes="card" IsVisible="False"><StackPanel><TextBlock Classes="h2" Text="Engineering diagnostics"/><WrapPanel Margin="0,10,0,0"><Button x:Name="FlightLoad" Content="Load flight recorder"/><Button x:Name="HangCsv" Content="Export hang CSV…"/><Button x:Name="DebugCdc" Content="Debug CDC reboot"/><Button x:Name="FactoryErase" Classes="danger" Content="Factory erase"/><Button x:Name="WipeBoard" Classes="danger" Content="Full-board wipe"/></WrapPanel><TextBox x:Name="DiagnosticOutput" Margin="0,10,0,0" Height="190" AcceptsReturn="True" IsReadOnly="True" FontFamily="Consolas"/></StackPanel></Border>
         </StackPanel></ScrollViewer>
@@ -100,8 +110,18 @@
         <ScrollViewer HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="16" MaxWidth="1100" HorizontalAlignment="Stretch"><TextBlock Classes="h1" Text="Firmware"/><TextBlock x:Name="FirmwareGate" Margin="0,4,0,14" Foreground="#E5C76B" Text="Connect a protocol v15+ puck or a ReversePuck." TextWrapping="Wrap"/>
           <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Local UF2"/><StackPanel Orientation="Horizontal" Margin="0,10,0,0" Spacing="8"><Button x:Name="FirmwarePick" Content="Choose UF2…"/><Button x:Name="FirmwareFlash" Content="Flash selected image" Background="#3157A5" IsEnabled="False"/><Button x:Name="FirmwareAbort" Content="Abort"/></StackPanel><TextBlock x:Name="FirmwareSelection" Margin="0,10,0,0" Text="No image selected" TextWrapping="Wrap"/></StackPanel></Border>
           <Border Classes="card"><StackPanel><StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="h2" Text="GitHub releases"/><CheckBox x:Name="IncludePrereleases" IsVisible="False" Content="Include prereleases"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0,10,0,0" Spacing="8"><Button x:Name="FirmwareReleases" Content="Load releases"/><Button x:Name="ReleaseStandard" Content="Use standard asset"/><Button x:Name="ReleaseFactory" Classes="danger" Content="Use factory-reset asset"/></StackPanel><ListBox x:Name="ReleaseList" Margin="0,10,0,0" Height="170"/></StackPanel></Border>
-          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Recovery and bootloaders"/><WrapPanel Margin="0,10,0,0"><Button x:Name="SerialDfu" Content="Serial DFU"/><Button x:Name="Uf2Dfu" Content="UF2 DFU"/></WrapPanel></StackPanel></Border>
+          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Connected OpenPuck bootloaders"/><TextBlock Margin="0,4,0,10" Foreground="#91A3C8" Text="These commands only reboot the connected device into a bootloader. They do not select, transfer, or flash firmware." TextWrapping="Wrap"/><WrapPanel><Button x:Name="SerialDfu" Content="Reboot to Serial DFU"/><Button x:Name="Uf2Dfu" Content="Reboot to UF2 DFU"/></WrapPanel></StackPanel></Border>
+          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Unflashed board / serial bootloader"/><TextBlock Margin="0,4,0,10" Foreground="#91A3C8" Text="For compatible boards exposing a serial port, a 1200-baud touch can request the bootloader without flashing OpenPuck. If no port appears or the board does not respond, double-tap Reset or briefly short RST to GND twice." TextWrapping="Wrap"/><StackPanel Orientation="Horizontal" Spacing="8"><ComboBox x:Name="SerialPortPicker" MinWidth="220"/><Button x:Name="SerialPortRefresh" Content="Refresh ports"/><Button x:Name="SerialPortDfu" Content="Enter DFU" Background="#3157A5"/></StackPanel><TextBlock x:Name="SerialDfuStatus" Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#91A3C8"/></StackPanel></Border>
           <ProgressBar x:Name="FirmwareProgress" Minimum="0" Maximum="100"/><TextBlock x:Name="FirmwareStatus" Margin="0,8,0,0" TextWrapping="Wrap"/>
+        </StackPanel></ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="About">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="16" MaxWidth="1100" HorizontalAlignment="Stretch">
+          <TextBlock Classes="h1" Text="About" Margin="0,0,0,14"/>
+          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="OpenPuck Native Configuration"/><TextBlock x:Name="AppVersionText" Margin="0,6,0,0" Foreground="#91A3C8" Text="Version 0.1.0"/><TextBlock Margin="0,12,0,0" Text="An independent cross-platform native configuration client for OpenPuck hardware." TextWrapping="Wrap"/></StackPanel></Border>
+          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Updates"/><StackPanel Orientation="Horizontal" Margin="0,10,0,0" Spacing="8"><Button x:Name="CheckAppUpdates" Content="Check for updates" Background="#3157A5"/><Button x:Name="ViewAppRelease" Content="View release" IsEnabled="False"/></StackPanel><TextBlock x:Name="AppUpdateStatus" Margin="0,10,0,0" Text="Updates have not been checked yet." TextWrapping="Wrap" Foreground="#91A3C8"/></StackPanel></Border>
+          <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Project links"/><WrapPanel Margin="0,10,0,0"><Button x:Name="OpenThisRepository" Content="This project's GitHub"/><Button x:Name="OpenUpstreamRepository" Content="Original OpenPuck"/></WrapPanel></StackPanel></Border>
         </StackPanel></ScrollViewer>
       </TabItem>
     </TabControl>

@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semantic version, without or with a leading v"
+        required: true
+        type: string
+      release_type:
+        description: "GitHub release channel"
+        required: true
+        default: prerelease
+        type: choice
+        options:
+          - prerelease
+          - stable
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+      assembly_version: ${{ steps.metadata.outputs.assembly_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: metadata
+        name: Validate release metadata
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_RELEASE_TYPE: ${{ inputs.release_type }}
+        run: |
+          set -euo pipefail
+          stable_pattern='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          prerelease_pattern='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$'
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            version="${INPUT_VERSION#v}"
+            tag="v${version}"
+            if [[ "$INPUT_RELEASE_TYPE" == "stable" ]]; then
+              [[ "$version" =~ $stable_pattern ]] || { echo "Stable versions must match semantic version X.Y.Z"; exit 1; }
+              prerelease=false
+            else
+              [[ "$version" =~ $prerelease_pattern ]] || { echo "Prerelease versions must match semantic version X.Y.Z-suffix"; exit 1; }
+              prerelease=true
+            fi
+            if git show-ref --verify --quiet "refs/tags/$tag"; then
+              echo "Tag $tag already exists; refusing to overwrite it."
+              exit 1
+            fi
+          else
+            tag="$TAG_NAME"
+            version="${tag#v}"
+            if [[ "$version" =~ $stable_pattern ]]; then
+              prerelease=false
+            elif [[ "$version" =~ $prerelease_pattern ]]; then
+              prerelease=true
+            else
+              echo "Release tags must match vX.Y.Z or vX.Y.Z-suffix"
+              exit 1
+            fi
+          fi
+          if [[ "$prerelease" == "true" ]]; then
+            IFS='.' read -ra identifiers <<< "${version#*-}"
+            for identifier in "${identifiers[@]}"; do
+              if [[ "$identifier" =~ ^[0-9]+$ && ${#identifier} -gt 1 && "$identifier" == 0* ]]; then
+                echo "Numeric prerelease identifiers cannot have leading zeroes: $identifier"
+                exit 1
+              fi
+            done
+          fi
+          core="${version%%-*}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "assembly_version=${core}.0" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore OpenPuckWeblessSettings.slnx
+      - run: dotnet test OpenPuckWeblessSettings.slnx -c Release --no-restore
+
+  publish:
+    needs: [prepare, test]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+            extension: zip
+          - rid: win-arm64
+            runner: windows-latest
+            extension: zip
+          - rid: linux-x64
+            runner: ubuntu-latest
+            extension: tar.gz
+          - rid: osx-x64
+            runner: macos-latest
+            extension: tar.gz
+          - rid: osx-arm64
+            runner: macos-latest
+            extension: tar.gz
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish ${{ matrix.rid }}
+        shell: pwsh
+        run: |
+          dotnet publish OpenPuckWeblessSettings.csproj `
+            -c Release `
+            -r "${{ matrix.rid }}" `
+            --self-contained true `
+            -p:Version="${{ needs.prepare.outputs.version }}" `
+            -p:AssemblyVersion="${{ needs.prepare.outputs.assembly_version }}" `
+            -p:FileVersion="${{ needs.prepare.outputs.assembly_version }}" `
+            -p:InformationalVersion="${{ needs.prepare.outputs.version }}" `
+            -p:ContinuousIntegrationBuild=true `
+            -o publish
+      - name: Package archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $base = "OpenPuckWeblessSettings-${{ needs.prepare.outputs.version }}-${{ matrix.rid }}"
+          if ("${{ matrix.extension }}" -eq "zip") {
+            Compress-Archive -Path "publish/*" -DestinationPath "dist/$base.zip"
+          } else {
+            tar -czf "dist/$base.tar.gz" -C publish .
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.rid }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to overwrite it."
+            exit 1
+          fi
+          args=("$TAG" dist/* --title "OpenPuck Native Configuration $TAG" --generate-notes --target "$TARGET_SHA")
+          if [[ "$PRERELEASE" == "true" ]]; then args+=(--prerelease); fi
+          gh release create "${args[@]}"

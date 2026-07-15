@@ -7,6 +7,8 @@ The application is written in C# with Avalonia and communicates directly over US
 > [!IMPORTANT]
 > This is an independent native client for OpenPuck hardware. The upstream firmware and original browser configuration interface are maintained by the [OpenPuck project](https://github.com/safijari/openpuck/tree/main). This repository does not replace or represent the upstream project.
 
+![OpenPuck Native Configuration overview with the device serial number redacted](assets/openpuck-native-overview.png)
+
 ## Features
 
 - Native Windows, Linux, and macOS UI.
@@ -20,6 +22,8 @@ The application is written in C# with Avalonia and communicates directly over US
 - Web-interface-compatible settings and four-bond JSON backup/restore.
 - Capture, flight-recorder, wedge, reset, timing, and maintenance diagnostics.
 - Local UF2 and GitHub-release firmware updates with UF2 validation, CRC32, on-device verification, transfer resynchronization, and automatic post-flash reconnect.
+- Connected-device DFU reboot commands plus a standalone 1200-baud serial-touch bootloader trigger that does not flash firmware.
+- In-app version display, stable/prerelease-aware update checks, and links to this application and the upstream OpenPuck project.
 - Session-only Advanced mode with an explicit warning for prereleases, engineering diagnostics, factory erase, and full-board wipe.
 
 ## Project status
@@ -32,18 +36,84 @@ Hardware acceptance is still required for:
 - Linux and macOS USB access and packaging.
 - Firmware flashing and destructive maintenance operations on expendable hardware.
 
-## Requirements
+## Installation
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download) for development builds.
-- A compatible OpenPuck microcontroller target exposing its vendor-class bulk USB interface.
-- Native libusb 1.0 support:
-  - **Windows x64/ARM64:** the official libusb 1.0.30 DLL is bundled. The OpenPuck vendor interface must use WinUSB.
-  - **Linux:** install the distribution's libusb 1.0 runtime and apply [`packaging/linux/50-openpuck.rules`](packaging/linux/50-openpuck.rules).
-  - **macOS:** install or package `libusb-1.0.0.dylib` for the target architecture. Release app bundles must include and sign the library.
+Download the archive for your operating system and CPU architecture from the [GitHub Releases page](https://github.com/kevinf100/OpenPuckWeblessSettings/releases). Release builds are self-contained, so they do not require a separate .NET installation. A compatible OpenPuck microcontroller target exposing its vendor-class bulk USB interface is also required.
 
-Close Steam, browsers, USB sniffers, and other applications that might already own the OpenPuck USB interface before connecting.
+### Windows
+
+1. Download the `win-x64.zip` archive for a typical Intel or AMD Windows PC, or `win-arm64.zip` for Windows on ARM.
+2. Extract the entire archive to a folder. Do not run the executable from inside the ZIP file.
+3. Run `OpenPuckWeblessSettings.exe`.
+
+The required libusb 1.0.30 DLL is bundled with both Windows archives. Windows should automatically load its built-in WinUSB driver when the OpenPuck is connected. If the app cannot find the device, open Device Manager and verify that the OpenPuck vendor interface uses **WinUSB**. If necessary, follow Microsoft's [WinUSB installation guidance](https://learn.microsoft.com/en-us/windows-hardware/drivers/usbcon/automatic-installation-of-winusb) for the vendor interface.
+
+### Linux
+
+The published Linux archive currently supports x64 systems. Download the `linux-x64.tar.gz` archive, extract it, and make the application executable:
+
+```bash
+tar -xzf OpenPuckWeblessSettings-*-linux-x64.tar.gz
+chmod +x OpenPuckWeblessSettings
+./OpenPuckWeblessSettings
+```
+
+Install the libusb 1.0 runtime for your distribution:
+
+```bash
+# Debian or Ubuntu
+sudo apt update
+sudo apt install libusb-1.0-0
+
+# Fedora or RHEL
+sudo dnf install libusb1
+
+# Arch Linux
+sudo pacman -S libusb
+```
+
+USB access also requires the included [`50-openpuck.rules`](packaging/linux/50-openpuck.rules) udev rule. Download that file, change to the directory containing it, and run:
+
+```bash
+sudo groupadd --force plugdev
+sudo usermod -aG plugdev "$USER"
+sudo install -Dm644 50-openpuck.rules /etc/udev/rules.d/50-openpuck.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=usb
+```
+
+Sign out and back in so the new group membership takes effect, then unplug and reconnect the OpenPuck before starting the app.
+
+### macOS
+
+1. Download `osx-arm64.tar.gz` for an Apple Silicon Mac or `osx-x64.tar.gz` for an Intel Mac.
+2. Install [Homebrew](https://brew.sh/) if needed, then install the native libusb library:
+
+   ```bash
+   brew install libusb
+   ```
+
+3. Extract the archive and launch the application:
+
+   ```bash
+   tar -xzf OpenPuckWeblessSettings-*-osx-*.tar.gz
+   chmod +x OpenPuckWeblessSettings
+   ./OpenPuckWeblessSettings
+   ```
+
+The application archive and the Homebrew libusb installation must match the Mac's architecture. If the app reports that the native libusb library was not found, launch it with Homebrew's library directory available:
+
+```bash
+DYLD_LIBRARY_PATH="$(brew --prefix libusb)/lib" ./OpenPuckWeblessSettings
+```
+
+The macOS archives are currently unsigned and not notarized. If macOS blocks the first launch and you trust the downloaded archive, try to open it once, then go to **System Settings > Privacy & Security** and choose **Open Anyway** as described in [Apple's guidance for unsigned apps](https://support.apple.com/en-us/102445).
+
+On every platform, close Steam, browsers, USB sniffers, and other applications that might already own the OpenPuck USB interface before connecting.
 
 ## Build and run
+
+Building from source requires the [.NET 10 SDK](https://dotnet.microsoft.com/download). The SDK is not required when using a release archive.
 
 ```powershell
 dotnet restore OpenPuckWeblessSettings.slnx
@@ -51,6 +121,8 @@ dotnet run --project OpenPuckWeblessSettings.csproj
 ```
 
 The app scans automatically. Select an OpenPuck target and choose **Connect**.
+
+The **About** tab shows the installed app version and checks this repository's GitHub releases for updates. Update checks only notify and open the matching release page; the app does not download or replace itself.
 
 For a terminal-only connection check:
 
@@ -64,7 +136,22 @@ dotnet run --project OpenPuckWeblessSettings.csproj -- --probe
 dotnet test OpenPuckWeblessSettings.slnx
 ```
 
-## Publishing
+## Entering DFU without flashing
+
+The Firmware tab offers two separate paths:
+
+- **Connected OpenPuck bootloaders** sends the existing Serial DFU or UF2 DFU reboot command to a connected OpenPuck. These buttons do not select, transfer, or flash an image.
+- **Unflashed board / serial bootloader** enumerates host serial ports and sends a 1200-baud touch to the selected port. This works only when the board's current CDC application or bootloader supports that convention.
+
+If the board exposes no serial port or does not respond, double-tap its Reset button or briefly short RST to GND twice. Hardware behavior varies by bootloader; confirm the correct reset procedure for your board before proceeding.
+
+## Downloads and publishing
+
+Stable and prerelease builds are published on this repository's [GitHub Releases page](https://github.com/kevinf100/OpenPuckWeblessSettings/releases). Release archives and their platform requirements are described in the [Installation](#installation) section.
+
+For maintainers, pushing a semantic tag such as `v0.2.0` automatically tests, builds, and creates a stable release. A suffix such as `v0.2.0-rc.1` creates a GitHub prerelease. The Release workflow can also be started manually with a version and stable/prerelease selection; it refuses to replace an existing tag or release.
+
+## Local publishing
 
 Self-contained builds do not require a separately installed .NET runtime:
 
@@ -76,7 +163,7 @@ dotnet publish OpenPuckWeblessSettings.csproj -c Release -r osx-x64 --self-conta
 dotnet publish OpenPuckWeblessSettings.csproj -c Release -r osx-arm64 --self-contained true
 ```
 
-Linux and macOS distributions must package a compatible native libusb library. Platform packages should be tested and signed according to the target operating system's requirements.
+Linux and macOS distributions use the system's compatible native libusb library. Platform archives should be tested and signed according to the target operating system's requirements before being redistributed as trusted packages.
 
 ## Advanced mode and safety
 
