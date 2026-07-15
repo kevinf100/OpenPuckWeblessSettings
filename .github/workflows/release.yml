@@ -144,7 +144,37 @@ jobs:
             -p:FileVersion="${{ needs.prepare.outputs.assembly_version }}" `
             -p:InformationalVersion="${{ needs.prepare.outputs.version }}" `
             -p:ContinuousIntegrationBuild=true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
             -o publish
+      - name: Clean and validate publish layout
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path publish -Recurse -File -Filter *.pdb | Remove-Item -Force
+
+          $pdbs = @(Get-ChildItem -Path publish -Recurse -File -Filter *.pdb)
+          if ($pdbs.Count -ne 0) {
+            throw "Publish output still contains PDB files: $($pdbs.FullName -join ', ')"
+          }
+
+          $expected = if ("${{ matrix.rid }}".StartsWith("win-")) {
+            "OpenPuckWeblessSettings.exe"
+          } else {
+            "OpenPuckWeblessSettings"
+          }
+          $entries = @(Get-ChildItem -Path publish -Force)
+          if ($entries.Count -ne 1 -or $entries[0].PSIsContainer -or $entries[0].Name -ne $expected) {
+            $actual = $entries.Name -join ', '
+            throw "Expected publish output to contain only '$expected'; found: $actual"
+          }
+          if (-not "${{ matrix.rid }}".StartsWith("win-")) {
+            $mode = [System.IO.File]::GetUnixFileMode($entries[0].FullName)
+            if (($mode -band [System.IO.UnixFileMode]::UserExecute) -eq 0) {
+              throw "Published executable is missing its Unix user-execute permission."
+            }
+          }
       - name: Package archive
         shell: pwsh
         run: |

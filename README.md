@@ -39,15 +39,15 @@ Hardware acceptance is still required for:
 
 ## Installation
 
-Download the archive for your operating system and CPU architecture from the [GitHub Releases page](https://github.com/kevinf100/OpenPuckWeblessSettings/releases). Release builds are self-contained, so they do not require a separate .NET installation. A compatible OpenPuck microcontroller target exposing its vendor-class bulk USB interface is also required.
+Download the archive for your operating system and CPU architecture from the [GitHub Releases page](https://github.com/kevinf100/OpenPuckWeblessSettings/releases). Each archive contains a single self-contained executable, so release builds do not require a separate .NET installation or adjacent dependency files. A compatible OpenPuck microcontroller target exposing its vendor-class bulk USB interface is also required.
 
 ### Windows
 
 1. Download the `win-x64.zip` archive for a typical Intel or AMD Windows PC, or `win-arm64.zip` for Windows on ARM.
-2. Extract the entire archive to a folder. Do not run the executable from inside the ZIP file.
+2. Extract the executable from the archive to a folder. Do not run it from inside the ZIP file.
 3. Run `OpenPuckWeblessSettings.exe`.
 
-The required libusb 1.0.30 DLL is bundled with both Windows archives. Windows should automatically load its built-in WinUSB driver when the OpenPuck is connected. If the app cannot find the device, open Device Manager and verify that the OpenPuck vendor interface uses **WinUSB**. If necessary, follow Microsoft's [WinUSB installation guidance](https://learn.microsoft.com/en-us/windows-hardware/drivers/usbcon/automatic-installation-of-winusb) for the vendor interface.
+The required libusb 1.0.30 native library is bundled inside the executable and extracted automatically when the app starts. Windows should automatically load its built-in WinUSB driver when the OpenPuck is connected. If the app cannot find the device, open Device Manager and verify that the OpenPuck vendor interface uses **WinUSB**. If necessary, follow Microsoft's [WinUSB installation guidance](https://learn.microsoft.com/en-us/windows-hardware/drivers/usbcon/automatic-installation-of-winusb) for the vendor interface.
 
 ### Linux
 
