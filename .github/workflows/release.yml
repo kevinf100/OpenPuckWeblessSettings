@@ -117,6 +117,9 @@ jobs:
           - rid: linux-x64
             runner: ubuntu-latest
             extension: tar.gz
+          - rid: linux-arm64
+            runner: ubuntu-latest
+            extension: tar.gz
           - rid: osx-x64
             runner: macos-latest
             extension: tar.gz
@@ -152,7 +155,7 @@ jobs:
           } else {
             tar -czf "dist/$base.tar.gz" -C publish .
           }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: release-${{ matrix.rid }}
           path: dist/*
@@ -162,7 +165,7 @@ jobs:
     needs: [prepare, publish]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: release-*
           path: dist

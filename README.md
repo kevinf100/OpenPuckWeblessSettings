@@ -51,7 +51,7 @@ The required libusb 1.0.30 DLL is bundled with both Windows archives. Windows sh
 
 ### Linux
 
-The published Linux archive currently supports x64 systems. Download the `linux-x64.tar.gz` archive, extract it, and make the application executable:
+Linux archives are published for x64 and ARM64 systems. Download the `linux-x64.tar.gz` archive for an Intel or AMD system, or the `linux-arm64.tar.gz` archive for an ARM64 system. Extract the selected archive and make the application executable:
 
 ```bash
 tar -xzf OpenPuckWeblessSettings-*-linux-x64.tar.gz
@@ -160,6 +160,7 @@ Self-contained builds do not require a separately installed .NET runtime:
 dotnet publish OpenPuckWeblessSettings.csproj -c Release -r win-x64 --self-contained true
 dotnet publish OpenPuckWeblessSettings.csproj -c Release -r win-arm64 --self-contained true
 dotnet publish OpenPuckWeblessSettings.csproj -c Release -r linux-x64 --self-contained true
+dotnet publish OpenPuckWeblessSettings.csproj -c Release -r linux-arm64 --self-contained true
 dotnet publish OpenPuckWeblessSettings.csproj -c Release -r osx-x64 --self-contained true
 dotnet publish OpenPuckWeblessSettings.csproj -c Release -r osx-arm64 --self-contained true
 ```
