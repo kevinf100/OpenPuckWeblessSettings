@@ -7,7 +7,8 @@ The application is written in C# with Avalonia and communicates directly over US
 > [!IMPORTANT]
 > This is an independent native client for OpenPuck hardware. The upstream firmware and original browser configuration interface are maintained by the [OpenPuck project](https://github.com/safijari/openpuck/tree/main). This repository does not replace or represent the upstream project.
 
-![OpenPuck Native Configuration overview with the device serial number redacted](assets/openpuck-native-overview.png)
+> [!IMPORTANT]
+> Linux and MacOS is currently untested!
 
 ## Features
 
