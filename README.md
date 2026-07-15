@@ -10,7 +10,7 @@ The application is written in C# with Avalonia and communicates directly over US
 > [!IMPORTANT]
 > Linux and MacOS is currently untested!
 
-[![App Screenshot](assets/openpuck-native-overview.png)]
+![App Screenshot](assets/openpuck-native-overview.png)
 
 ## Features
 
