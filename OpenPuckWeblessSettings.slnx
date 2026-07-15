@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="OpenPuckWeblessSettings.csproj" />
+  <Project Path="OpenPuckWeblessSettings.Tests/OpenPuckWeblessSettings.Tests.csproj" />
+</Solution>

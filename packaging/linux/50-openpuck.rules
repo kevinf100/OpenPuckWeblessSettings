@@ -1,0 +1,2 @@
+# Allow members of plugdev to access Valve/OpenPuck USB devices through libusb.
+SUBSYSTEM=="usb", ATTR{idVendor}=="28de", MODE="0664", GROUP="plugdev"
