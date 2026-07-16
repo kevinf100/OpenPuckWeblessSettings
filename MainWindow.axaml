@@ -31,9 +31,9 @@
         <Button x:Name="AppUpdateButton" Grid.Column="4" Margin="8,0,0,0" Height="34" VerticalAlignment="Top" Content="Update available" IsVisible="False" Background="#3157A5"/>
         <Button x:Name="AdvancedButton" Grid.Column="5" Margin="8,0,0,0" Height="34" VerticalAlignment="Top" Content="Advanced"/>
         <Grid Grid.Column="1" Grid.ColumnSpan="5" Grid.Row="1" Margin="0,6,0,0" ColumnDefinitions="*,Auto,*">
-          <TextBlock x:Name="DeviceDetails" Margin="0,0,8,0" Foreground="#91A3C8" Text="Scanning for OpenPuck targets…" TextTrimming="CharacterEllipsis"/>
+          <TextBlock x:Name="DeviceDetails" Margin="0,0,8,0" Foreground="#91A3C8" Text="Scanning for OpenPuck targets…" TextWrapping="Wrap"/>
           <TextBlock x:Name="UnsavedChangesText" Grid.Column="1" Margin="12,0" Foreground="#E5C76B" FontWeight="SemiBold" Text="● Unsaved changes" IsVisible="False"/>
-          <TextBlock x:Name="ConnectionState" Grid.Column="2" Margin="8,0,0,0" HorizontalAlignment="Stretch" TextAlignment="Right" Text="Not connected" TextTrimming="CharacterEllipsis"/>
+          <TextBlock x:Name="ConnectionState" Grid.Column="2" Margin="8,0,0,0" HorizontalAlignment="Stretch" TextAlignment="Right" Text="Not connected" TextWrapping="Wrap"/>
         </Grid>
       </Grid>
     </Border>
