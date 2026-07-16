@@ -121,6 +121,18 @@
           <TextBlock Classes="h1" Text="About" Margin="0,0,0,14"/>
           <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="OpenPuck Native Configuration"/><TextBlock x:Name="AppVersionText" Margin="0,6,0,0" Foreground="#91A3C8" Text="Version 0.1.0"/><TextBlock Margin="0,12,0,0" Text="An independent cross-platform native configuration client for OpenPuck hardware." TextWrapping="Wrap"/></StackPanel></Border>
           <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Updates"/><StackPanel Orientation="Horizontal" Margin="0,10,0,0" Spacing="8"><Button x:Name="CheckAppUpdates" Content="Check for updates" Background="#3157A5"/><Button x:Name="ViewAppRelease" Content="View release" IsEnabled="False"/></StackPanel><TextBlock x:Name="AppUpdateStatus" Margin="0,10,0,0" Text="Updates have not been checked yet." TextWrapping="Wrap" Foreground="#91A3C8"/></StackPanel></Border>
+          <Border Classes="card"><StackPanel>
+            <TextBlock Classes="h2" Text="System Info"/>
+            <TextBlock Margin="0,4,0,10" Foreground="#91A3C8" Text="Generate a Markdown report for troubleshooting or a GitHub issue. Nothing is uploaded automatically; review the report before sharing it." TextWrapping="Wrap"/>
+            <WrapPanel>
+              <Button x:Name="GenerateSystemInfo" Content="Generate system info" Background="#3157A5"/>
+              <CheckBox x:Name="SystemInfoIncludeAllUsb" Margin="14,0,0,0" VerticalAlignment="Center" Content="Include all USB devices"/>
+              <CheckBox x:Name="SystemInfoShowIdentifiers" Margin="14,0,0,0" VerticalAlignment="Center" Content="Show hardware identifiers"/>
+            </WrapPanel>
+            <TextBlock x:Name="SystemInfoStatus" Margin="0,10,0,0" Foreground="#91A3C8" Text="Hardware identifiers are redacted by default." TextWrapping="Wrap"/>
+            <TextBox x:Name="SystemInfoOutput" Margin="0,10,0,0" Height="320" AcceptsReturn="True" IsReadOnly="True" FontFamily="Consolas" TextWrapping="NoWrap" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0" Spacing="8"><Button x:Name="CopySystemInfo" Content="Copy" IsEnabled="False"/><Button x:Name="SaveSystemInfo" Content="Save…" IsEnabled="False"/></StackPanel>
+          </StackPanel></Border>
           <Border Classes="card"><StackPanel><TextBlock Classes="h2" Text="Project links"/><WrapPanel Margin="0,10,0,0"><Button x:Name="OpenThisRepository" Content="This project's GitHub"/><Button x:Name="OpenUpstreamRepository" Content="Original OpenPuck"/></WrapPanel></StackPanel></Border>
         </StackPanel></ScrollViewer>
       </TabItem>

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -48,6 +49,9 @@ public sealed partial class MainWindow : Window
     private readonly IApplicationVersionProvider _appVersion;
     private readonly IExternalUriLauncher _uriLauncher;
     private readonly ISerialDfuService _serialDfu;
+    private readonly SystemInfoReportService _systemInfo = new(
+        new RuntimeHostSystemInfoProvider(),
+        new LibUsbInventoryProvider());
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<LizardBinding> _lizardBindings = [];
     private readonly List<HangRecord> _hangRecords = [];
@@ -68,6 +72,7 @@ public sealed partial class MainWindow : Window
     private bool _stabilityTestActive;
     private bool _closeConfirmationPending;
     private bool _allowClose;
+    private bool _systemInfoBusy;
     private int _renderedControllerType = -1;
 
     public MainWindow() : this(new LibUsbOpenPuckTransport()) { }
@@ -202,6 +207,121 @@ public sealed partial class MainWindow : Window
         AppUpdateButton.Click += (_, _) => OpenUri(_latestAppRelease?.ReleaseUri ?? GitHubAppReleaseService.ReleasesUri);
         OpenThisRepository.Click += (_, _) => OpenUri(GitHubAppReleaseService.RepositoryUri);
         OpenUpstreamRepository.Click += (_, _) => OpenUri(GitHubAppReleaseService.UpstreamRepositoryUri);
+        GenerateSystemInfo.Click += async (_, _) => await GenerateSystemInfoAsync();
+        CopySystemInfo.Click += async (_, _) => await CopySystemInfoAsync();
+        SaveSystemInfo.Click += async (_, _) => await SaveSystemInfoAsync();
+        SystemInfoIncludeAllUsb.IsCheckedChanged += (_, _) => ClearSystemInfoReport();
+        SystemInfoShowIdentifiers.IsCheckedChanged += (_, _) => ClearSystemInfoReport();
+    }
+
+    private async Task GenerateSystemInfoAsync()
+    {
+        if (_systemInfoBusy) return;
+        _systemInfoBusy = true;
+        GenerateSystemInfo.IsEnabled = false;
+        CopySystemInfo.IsEnabled = false;
+        SaveSystemInfo.IsEnabled = false;
+        SystemInfoStatus.Text = "Gathering system information…";
+
+        IReadOnlyList<string> serialPorts = [];
+        string? serialPortError = null;
+        try
+        {
+            serialPorts = _serialDfu.GetPortNames();
+        }
+        catch (Exception exception)
+        {
+            serialPortError = FlattenException(exception);
+        }
+
+        try
+        {
+            var discovered = DevicePicker.ItemsSource is IEnumerable<OpenPuckDevice> devices
+                ? devices.ToArray()
+                : [];
+            var request = new SystemInfoReportRequest
+            {
+                AppVersion = _appVersion.DisplayVersion,
+                IncludeAllUsbDevices = SystemInfoIncludeAllUsb.IsChecked == true,
+                ShowHardwareIdentifiers = SystemInfoShowIdentifiers.IsChecked == true,
+                IsConnected = _session.IsConnected,
+                DiscoveredDevices = discovered,
+                SelectedDevice = _session.Device ?? DevicePicker.SelectedItem as OpenPuckDevice,
+                Profile = _session.Profile,
+                PuckStatus = _session.PuckStatus,
+                ReversePuckStatus = _session.ReversePuckStatus,
+                AppliedSettings = _session.PuckStatus is { } reportStatus
+                    ? OpenPuckSettingsDraft.FromStatus(reportStatus)
+                    : null,
+                UnsavedSettings = _settingsDirty ? CollectSettings() : null,
+                SerialPorts = serialPorts,
+                SerialPortError = serialPortError
+            };
+            SystemInfoOutput.Text = await _systemInfo.GenerateAsync(request, _lifetime.Token);
+            var length = SystemInfoOutput.Text?.Length ?? 0;
+            CopySystemInfo.IsEnabled = length > 0;
+            SaveSystemInfo.IsEnabled = length > 0;
+            SystemInfoStatus.Text = request.ShowHardwareIdentifiers
+                ? "Report generated with hardware identifiers. Review it carefully before sharing."
+                : "Report generated with hardware identifiers redacted.";
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception exception)
+        {
+            SystemInfoOutput.Text = string.Empty;
+            SystemInfoStatus.Text = "Could not generate system info: " + FlattenException(exception);
+        }
+        finally
+        {
+            _systemInfoBusy = false;
+            GenerateSystemInfo.IsEnabled = true;
+        }
+    }
+
+    private async Task CopySystemInfoAsync()
+    {
+        var report = SystemInfoOutput.Text;
+        if (string.IsNullOrWhiteSpace(report)) return;
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard
+                ?? throw new InvalidOperationException("The system clipboard is unavailable.");
+            await clipboard.SetTextAsync(report);
+            SystemInfoStatus.Text = "System info copied to the clipboard.";
+        }
+        catch (Exception exception)
+        {
+            SystemInfoStatus.Text = "Could not copy system info: " + FlattenException(exception);
+        }
+    }
+
+    private async Task SaveSystemInfoAsync()
+    {
+        var report = SystemInfoOutput.Text;
+        if (string.IsNullOrWhiteSpace(report)) return;
+        try
+        {
+            var timestamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+            SystemInfoStatus.Text = await SaveTextAsync(
+                $"openpuck-system-info-{timestamp}.md", report, "Markdown report", "md")
+                ? "System info report saved."
+                : "Save canceled.";
+        }
+        catch (Exception exception)
+        {
+            SystemInfoStatus.Text = "Could not save system info: " + FlattenException(exception);
+        }
+    }
+
+    private void ClearSystemInfoReport()
+    {
+        if (_systemInfoBusy) return;
+        SystemInfoOutput.Text = string.Empty;
+        CopySystemInfo.IsEnabled = false;
+        SaveSystemInfo.IsEnabled = false;
+        SystemInfoStatus.Text = SystemInfoShowIdentifiers.IsChecked == true
+            ? "Hardware identifiers will be shown in the next generated report."
+            : "Hardware identifiers are redacted by default.";
     }
 
     private async Task CheckAppUpdatesAsync(bool manual)
@@ -953,17 +1073,18 @@ public sealed partial class MainWindow : Window
         DiagnosticOutput.Text = $"{DateTime.Now:T}  {text}{Environment.NewLine}" + DiagnosticOutput.Text;
     }
 
-    private async Task SaveTextAsync(string name, string text, string typeName, string extension)
+    private async Task<bool> SaveTextAsync(string name, string text, string typeName, string extension)
     {
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             SuggestedFileName = name,
             FileTypeChoices = [new FilePickerFileType(typeName) { Patterns = [$"*.{extension}"] }]
         });
-        if (file is null) return;
+        if (file is null) return false;
         await using var stream = await file.OpenWriteAsync();
         await using var writer = new StreamWriter(stream);
         await writer.WriteAsync(text);
+        return true;
     }
 
     private async Task<bool> ConfirmAsync(string title, string message)

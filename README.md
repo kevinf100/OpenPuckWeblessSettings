@@ -127,6 +127,8 @@ The app scans automatically. Select an OpenPuck target and choose **Connect**.
 
 The **About** tab shows the installed app version and checks this repository's GitHub releases for updates. Update checks only notify and open the matching release page; the app does not download or replace itself.
 
+The About tab can also generate a Markdown **System Info** report for troubleshooting and GitHub issues. The report summarizes the app/runtime/operating-system versions, discovered and connected OpenPuck hardware, firmware and protocol details, live controller/link diagnostics, current configuration, and serial-port availability. Hardware identifiers and raw device payloads are redacted by default. An optional setting adds a host-wide USB descriptor inventory, and another explicitly reveals available identifiers. Reports are previewed locally and can be copied or saved; the app never uploads them automatically.
+
 For a terminal-only connection check:
 
 ```powershell
