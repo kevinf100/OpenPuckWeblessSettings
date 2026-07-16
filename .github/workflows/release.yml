@@ -183,7 +183,7 @@ jobs:
           if ("${{ matrix.extension }}" -eq "zip") {
             Compress-Archive -Path "publish/*" -DestinationPath "dist/$base.zip"
           } else {
-            tar -czf "dist/$base.tar.gz" -C publish .
+            tar -czf "dist/$base.tar.gz" -C publish OpenPuckWeblessSettings
           }
       - uses: actions/upload-artifact@v6
         with:
