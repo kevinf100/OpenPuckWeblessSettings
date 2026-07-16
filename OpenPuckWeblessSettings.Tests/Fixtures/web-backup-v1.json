@@ -1,0 +1,20 @@
+{
+  "magic": "openpuck-backup",
+  "version": 1,
+  "bonds": [
+    { "slot": 0, "used": true, "rec": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "slot": 1, "used": false, "rec": "" },
+    { "slot": 2, "used": false, "rec": "" },
+    { "slot": 3, "used": false, "rec": "" }
+  ],
+  "config": {
+    "mode": 2,
+    "mDiv": 16,
+    "mFric": 5,
+    "persistMode": 1,
+    "chord": [3, 1, 4],
+    "rumble": 180,
+    "swProRate": 3,
+    "swGyro10": 12
+  }
+}

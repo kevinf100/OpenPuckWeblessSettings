@@ -1,0 +1,26 @@
+{
+  "magic": "openpuck-backup",
+  "version": 2,
+  "bonds": [
+    { "slot": 0, "used": true, "rec": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" },
+    { "slot": 1, "used": false, "rec": "" },
+    { "slot": 2, "used": false, "rec": "" },
+    { "slot": 3, "used": false, "rec": "" }
+  ],
+  "config": {
+    "mode": 4,
+    "mDiv": 12,
+    "mFric": 8,
+    "persistMode": 1,
+    "chord": "AwEE",
+    "rumble": 200,
+    "swProRate": 2,
+    "swGyro10": 10,
+    "types": [
+      { "back": "AQIDBA==", "qam": 11, "abSwap": 1, "pad": 0, "led": 96, "rumble": 1 }
+    ],
+    "lizardMap": [
+      { "outType": 1, "od": "AAQAAAAAAA==", "trig": 1, "hold": 2 }
+    ]
+  }
+}

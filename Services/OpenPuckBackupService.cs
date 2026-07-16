@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using OpenPuckWeblessSettings.Usb;
 
 namespace OpenPuckWeblessSettings.Services;
@@ -8,7 +9,8 @@ public sealed class OpenPuckBackupService(OpenPuckClient client)
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
-        WriteIndented = true
+        WriteIndented = true,
+        Converters = { new WebCompatibleByteArrayConverter() }
     };
 
     public async Task<OpenPuckBackupDocument> ExportAsync(
@@ -184,5 +186,33 @@ public sealed class OpenPuckBackupService(OpenPuckClient client)
         }
         throw new TimeoutException("Timed out waiting for the restored lizard-map echo.");
     }
-}
 
+    private sealed class WebCompatibleByteArrayConverter : JsonConverter<byte[]>
+    {
+        public override byte[] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.String)
+                return reader.GetBytesFromBase64();
+            if (reader.TokenType != JsonTokenType.StartArray)
+                throw new JsonException("Expected a byte array or Base64 string.");
+
+            var bytes = new List<byte>();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                if (reader.TokenType != JsonTokenType.Number || !reader.TryGetByte(out var value))
+                    throw new JsonException("Byte arrays may only contain integers from 0 through 255.");
+                bytes.Add(value);
+            }
+            if (reader.TokenType != JsonTokenType.EndArray)
+                throw new JsonException("The byte array is incomplete.");
+            return bytes.ToArray();
+        }
+
+        public override void Write(Utf8JsonWriter writer, byte[] value, JsonSerializerOptions options)
+        {
+            writer.WriteStartArray();
+            foreach (var item in value) writer.WriteNumberValue(item);
+            writer.WriteEndArray();
+        }
+    }
+}

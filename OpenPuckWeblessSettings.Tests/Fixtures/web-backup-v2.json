@@ -1,0 +1,29 @@
+{
+  "magic": "openpuck-backup",
+  "version": 2,
+  "bonds": [
+    { "slot": 0, "used": true, "rec": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    { "slot": 1, "used": false, "rec": "" },
+    { "slot": 2, "used": true, "rec": "cccccccccccccccccccccccccccccccccccccccccccccccc" },
+    { "slot": 3, "used": false, "rec": "" }
+  ],
+  "config": {
+    "mode": 4,
+    "mDiv": 12,
+    "mFric": 8,
+    "persistMode": 1,
+    "chord": [7, 8, 9],
+    "rumble": 200,
+    "swProRate": 2,
+    "swGyro10": 10,
+    "types": [
+      { "back": [1, 2, 3, 4], "qam": 11, "abSwap": 1, "pad": 0, "led": 96, "rumble": 1 },
+      { "back": [5, 6, 7, 8], "qam": 12, "abSwap": 0, "pad": 1, "led": 80, "rumble": 1 },
+      { "back": [9, 10, 11, 12], "qam": 13, "abSwap": 1, "pad": 1, "led": 64, "rumble": 0 },
+      { "back": [13, 14, 15, 16], "qam": 14, "abSwap": 0, "pad": 0, "led": 48, "rumble": 1 }
+    ],
+    "lizardMap": [
+      { "outType": 1, "od": [0, 4, 0, 0, 0, 0, 0], "trig": 2147483649, "hold": 2 }
+    ]
+  }
+}

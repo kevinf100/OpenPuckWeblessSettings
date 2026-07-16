@@ -19,4 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="..\OpenPuckWeblessSettings.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Fixtures\*.json" />
+  </ItemGroup>
 </Project>
